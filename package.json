@@ -27,6 +27,8 @@
     "vitest": "^2.0.0"
   },
   "vitest": {
-    "include": ["src/**/*.test.ts"]
+    "include": [
+      "src/**/*.test.ts"
+    ]
   }
 }
