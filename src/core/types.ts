@@ -80,6 +80,53 @@ export interface DeleteResult {
   error?: string;
 }
 
+export interface Group {
+  id: string;
+  name: string;
+  description?: string;
+  isDefault?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GroupMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  avatarUrl?: string;
+}
+
+export interface SpaceMember {
+  id: string;
+  name: string;
+  email?: string;
+  role: string;
+  type: "user" | "group";
+}
+
+export interface PageHistory {
+  id: string;
+  pageId: string;
+  title?: string;
+  content?: unknown;
+  createdAt: string;
+  lastUpdatedBy?: string;
+}
+
+export interface Label {
+  id: string;
+  name: string;
+  color?: string;
+  pageId?: string;
+}
+
+export interface Backlink {
+  id: string;
+  title: string;
+  spaceId: string;
+}
+
 // Input types
 export interface CreatePageInput {
   title: string;
@@ -120,4 +167,28 @@ export interface CreateCommentInput {
 export interface UpdateCommentInput {
   commentId: string;
   content: string;
+}
+
+export interface CreateGroupInput {
+  name: string;
+  description?: string;
+}
+
+export interface UpdateGroupInput {
+  groupId: string;
+  name?: string;
+  description?: string;
+}
+
+export interface AddSpaceMembersInput {
+  spaceId: string;
+  userIds?: string[];
+  groupIds?: string[];
+  role: string;
+}
+
+export interface RemoveSpaceMemberInput {
+  spaceId: string;
+  userId?: string;
+  groupId?: string;
 }

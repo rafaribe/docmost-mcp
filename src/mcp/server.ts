@@ -6,6 +6,7 @@ import { pageHandlers } from "./handlers/pages.js";
 import { spaceHandlers } from "./handlers/spaces.js";
 import { commentHandlers } from "./handlers/comments.js";
 import { workspaceHandlers } from "./handlers/workspace.js";
+import { groupHandlers } from "./handlers/groups.js";
 
 export function buildMcpServer(client: DocmostPort): McpServer {
   const server = new McpServer({
@@ -17,9 +18,10 @@ export function buildMcpServer(client: DocmostPort): McpServer {
   const spaces = spaceHandlers(client);
   const comments = commentHandlers(client);
   const workspace = workspaceHandlers(client);
+  const groups = groupHandlers(client);
 
   // Register all tools
-  for (const [name, def] of Object.entries({ ...pages, ...spaces, ...comments, ...workspace })) {
+  for (const [name, def] of Object.entries({ ...pages, ...spaces, ...comments, ...workspace, ...groups })) {
     server.registerTool(name, {
       description: def.description,
       inputSchema: def.inputSchema,

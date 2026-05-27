@@ -4,15 +4,16 @@ import type {
   CreatePageInput, UpdatePageInput, MovePageInput,
   CreateSpaceInput, UpdateSpaceInput,
   CreateCommentInput, UpdateCommentInput,
+  Group, GroupMember, CreateGroupInput, UpdateGroupInput,
+  SpaceMember, AddSpaceMembersInput, RemoveSpaceMemberInput,
+  PageHistory, Label, Backlink,
 } from "../core/types.js";
 import type { DocmostPort } from "../core/ports.js";
 import { convertProseMirrorToMarkdown } from "./markdown.js";
 
 export interface DocmostClientOptions {
   baseUrl: string;
-  /** API token (enterprise). Takes precedence over email/password if provided. */
   apiToken?: string;
-  /** Email + password for self-hosted instances without enterprise API. */
   email?: string;
   password?: string;
 }
@@ -67,10 +68,7 @@ export class DocmostClient implements DocmostPort {
   }
 
   private async post<T>(path: string, body: unknown): Promise<T> {
-    return this.request<T>(path, {
-      method: "POST",
-      body: JSON.stringify(body),
-    });
+    return this.request<T>(path, { method: "POST", body: JSON.stringify(body) });
   }
 
   private async paginate<T>(path: string, body: Record<string, unknown> = {}): Promise<T[]> {
@@ -122,6 +120,22 @@ export class DocmostClient implements DocmostPort {
     return this.post<Space>("/api/spaces/update", input);
   }
 
+  async deleteSpace(spaceId: string): Promise<void> {
+    await this.post("/api/spaces/delete", { spaceId });
+  }
+
+  async listSpaceMembers(spaceId: string): Promise<SpaceMember[]> {
+    return this.paginate<SpaceMember>("/api/spaces/members", { spaceId });
+  }
+
+  async addSpaceMembers(input: AddSpaceMembersInput): Promise<void> {
+    await this.post("/api/spaces/members/add", input);
+  }
+
+  async removeSpaceMember(input: RemoveSpaceMemberInput): Promise<void> {
+    await this.post("/api/spaces/members/remove", input);
+  }
+
   // --- Pages ---
 
   async getPage(pageId: string): Promise<Page> {
@@ -130,12 +144,10 @@ export class DocmostClient implements DocmostPort {
       ? convertProseMirrorToMarkdown(raw.content as Record<string, unknown>)
       : "";
 
-    // Fetch child pages
     let subpages: Array<{ id: string; title: string }> = [];
     try {
       const children = await this.post<{ items: Array<{ id: string; title: string }> }>(
-        "/api/pages/sidebar-pages",
-        { spaceId: raw.spaceId, pageId, page: 1 },
+        "/api/pages/sidebar-pages", { spaceId: raw.spaceId, pageId, page: 1 },
       );
       subpages = children.items ?? [];
     } catch { /* non-fatal */ }
@@ -182,10 +194,7 @@ export class DocmostClient implements DocmostPort {
     });
     if (input.content) {
       await this.post("/api/pages/update", {
-        pageId: created.id,
-        content: input.content,
-        format: "markdown",
-        operation: "replace",
+        pageId: created.id, content: input.content, format: "markdown", operation: "replace",
       });
     }
     return this.getPage(created.id);
@@ -195,25 +204,19 @@ export class DocmostClient implements DocmostPort {
     await this.post("/api/pages/update", {
       pageId: input.pageId,
       ...(input.title && { title: input.title }),
-      ...(input.content !== undefined && {
-        content: input.content,
-        format: "markdown",
-        operation: "replace",
-      }),
+      ...(input.content !== undefined && { content: input.content, format: "markdown", operation: "replace" }),
     });
     return this.getPage(input.pageId);
   }
 
   async movePage(input: MovePageInput): Promise<void> {
     await this.post("/api/pages/move", {
-      pageId: input.pageId,
-      parentPageId: input.parentPageId ?? null,
-      position: input.position ?? "a00000",
+      pageId: input.pageId, parentPageId: input.parentPageId ?? null, position: input.position ?? "a00000",
     });
   }
 
   async movePageToSpace(pageId: string, targetSpaceId: string): Promise<Page> {
-    await this.post("/api/pages/move-to-space", { pageId, targetSpaceId });
+    await this.post("/api/pages/move-to-space", { pageId, spaceId: targetSpaceId });
     return this.getPage(pageId);
   }
 
@@ -229,6 +232,15 @@ export class DocmostClient implements DocmostPort {
 
   async deletePage(pageId: string): Promise<void> {
     await this.post("/api/pages/delete", { pageId });
+  }
+
+  async restorePage(pageId: string): Promise<Page> {
+    await this.post("/api/pages/restore", { pageId });
+    return this.getPage(pageId);
+  }
+
+  async listTrash(spaceId: string): Promise<Page[]> {
+    return this.paginate<Page>("/api/pages/trash", { spaceId });
   }
 
   async searchPages(query: string, spaceId?: string): Promise<SearchResult[]> {
@@ -248,6 +260,26 @@ export class DocmostClient implements DocmostPort {
     }));
   }
 
+  async getPageHistory(pageId: string): Promise<PageHistory[]> {
+    return this.paginate<PageHistory>("/api/pages/history", { pageId });
+  }
+
+  async getPageLabels(pageId: string): Promise<Label[]> {
+    return this.paginate<Label>("/api/pages/labels", { pageId });
+  }
+
+  async addPageLabels(pageId: string, names: string[]): Promise<void> {
+    await this.post("/api/pages/labels/add", { pageId, names });
+  }
+
+  async removePageLabel(pageId: string, labelId: string): Promise<void> {
+    await this.post("/api/pages/labels/remove", { pageId, labelId });
+  }
+
+  async getBacklinks(pageId: string): Promise<Backlink[]> {
+    return this.paginate<Backlink>("/api/pages/backlinks", { pageId, direction: "incoming" });
+  }
+
   // --- Comments ---
 
   async getComments(pageId: string): Promise<Comment[]> {
@@ -264,6 +296,40 @@ export class DocmostClient implements DocmostPort {
 
   async deleteComment(commentId: string): Promise<void> {
     await this.post("/api/comments/delete", { commentId });
+  }
+
+  // --- Groups ---
+
+  async listGroups(): Promise<Group[]> {
+    return this.paginate<Group>("/api/groups/");
+  }
+
+  async getGroup(groupId: string): Promise<Group> {
+    return this.post<Group>("/api/groups/info", { groupId });
+  }
+
+  async createGroup(input: CreateGroupInput): Promise<Group> {
+    return this.post<Group>("/api/groups/create", input);
+  }
+
+  async updateGroup(input: UpdateGroupInput): Promise<Group> {
+    return this.post<Group>("/api/groups/update", input);
+  }
+
+  async deleteGroup(groupId: string): Promise<void> {
+    await this.post("/api/groups/delete", { groupId });
+  }
+
+  async listGroupMembers(groupId: string): Promise<GroupMember[]> {
+    return this.paginate<GroupMember>("/api/groups/members", { groupId });
+  }
+
+  async addGroupMembers(groupId: string, userIds: string[]): Promise<void> {
+    await this.post("/api/groups/members/add", { groupId, userIds });
+  }
+
+  async removeGroupMember(groupId: string, userId: string): Promise<void> {
+    await this.post("/api/groups/members/remove", { groupId, userId });
   }
 
   // --- Attachments ---
