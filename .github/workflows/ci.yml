@@ -83,6 +83,7 @@ jobs:
     needs: [test, integration]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    permissions: write-all
     steps:
       - name: Lowercase repository owner
         run: echo "LOWERCASE_REPO_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
