@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  integration:
+    runs-on: ubuntu-latest  # needs Docker for docker compose; home-ops ARC uses kubernetes containerMode (no Docker)
+    needs: test
+    env:
+      DOCMOST_EMAIL: admin@test.local
+      DOCMOST_PASSWORD: TestPassword123!
+      DOCMOST_BASE_URL: http://localhost:3000
+      MCP_URL: http://localhost:4000/mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Start Docmost stack
+        run: docker compose -f docker-compose.integration.yml up -d
+
+      - name: Wait for Docmost
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health; then
+              echo "Docmost is ready"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 3
+            if [ $i -eq 30 ]; then
+              echo "Docmost failed to start after 90s"
+              docker compose -f docker-compose.integration.yml logs
+              exit 1
+            fi
+          done
+
+      - name: Build and start MCP server
+        run: |
+          npm ci
+          npm run build
+          DOCMOST_BASE_URL=$DOCMOST_BASE_URL \
+          DOCMOST_EMAIL=$DOCMOST_EMAIL \
+          DOCMOST_PASSWORD=$DOCMOST_PASSWORD \
+          PORT=4000 \
+          node dist/index.js &
+          for i in $(seq 1 15); do
+            curl -sf http://localhost:4000/health && break
+            sleep 1
+          done
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f docker-compose.integration.yml down -v
+
+  publish:
+    needs: [test, integration]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/rafaribe/docmost-mcp
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=short
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

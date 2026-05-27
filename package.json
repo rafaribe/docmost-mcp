@@ -1,0 +1,32 @@
+{
+  "name": "docmost-mcp",
+  "version": "1.0.0",
+  "description": "Remote HTTP MCP server for Docmost — full API coverage",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write src",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "express": "^4.21.2",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.0.0"
+  },
+  "vitest": {
+    "include": ["src/**/*.test.ts"]
+  }
+}
